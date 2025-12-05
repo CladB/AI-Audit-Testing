@@ -46,20 +46,20 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
     <div className="flex flex-col items-center justify-center h-full p-8">
       <div 
         className={`w-full max-w-xl p-12 border-2 border-dashed rounded-xl transition-colors ${
-          isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-white'
+          isDragging ? 'border-pink-400 bg-pink-50' : 'border-slate-300 bg-white'
         }`}
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
       >
         <div className="flex flex-col items-center text-center">
-          <div className="p-4 bg-blue-100 rounded-full mb-4">
-            <Upload className="w-8 h-8 text-blue-600" />
+          <div className="p-4 bg-pink-100 rounded-full mb-4">
+            <Upload className="w-8 h-8 text-pink-600" />
           </div>
           <h3 className="text-xl font-semibold text-slate-800 mb-2">Unggah Data Audit</h3>
           <p className="text-slate-500 mb-6">Tarik dan lepas file CSV piutang Anda di sini, atau klik tombol untuk menelusuri.</p>
           
-          <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors">
+          <label className="cursor-pointer bg-pink-400 hover:bg-pink-800 text-white font-medium py-2 px-6 rounded-lg transition-colors">
             Cari File
             <input type="file" className="hidden" accept=".csv" onChange={handleChange} />
           </label>

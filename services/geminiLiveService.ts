@@ -52,8 +52,11 @@ export class GeminiLiveService {
     this.dataContext = context;
   }
 
-  async connect(onMessage: (text: string, isUser: boolean) => void, onStatusChange: (status: string) => void) {
+  async connect(onMessage: (text: string, isUser: boolean) => void, onStatusChange: (status: string) => void): Promise<void> {
     onStatusChange('connecting');
+
+    // Return a Promise that resolves when connection opens, or rejects on error
+    return new Promise<void>(async (resolve, reject) => {
 
     // Initialize Audio Contexts
     this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: PCM_SAMPLE_RATE_INPUT });
@@ -90,7 +93,13 @@ export class GeminiLiveService {
         callbacks: {
             onopen: () => {
                 onStatusChange('connected');
-                this.startMicrophone();
+                // start microphone after connected
+                try {
+                  this.startMicrophone();
+                } catch (err) {
+                  console.error('startMicrophone failed', err);
+                }
+                resolve();
             },
             onmessage: async (msg: LiveServerMessage) => {
                 // 1. Handle Tool Calls
@@ -116,61 +125,90 @@ export class GeminiLiveService {
             onerror: (err) => {
                 console.error("Gemini Live Error:", err);
                 onStatusChange('error');
+                reject(err);
             }
         }
       });
     } catch (e) {
       console.error(e);
       onStatusChange('error');
+      reject(e);
     }
+    });
   }
 
   private async handleToolCall(toolCall: any) {
-    if (!this.sessionPromise || !this.dataContext) return;
-
-    const functionResponses = [];
-
-    for (const fc of toolCall.functionCalls) {
-        let result: any = {};
-        
-        try {
-            switch (fc.name) {
-                case 'getAuditSummary':
-                    result = this.dataContext.summary;
-                    break;
-                case 'getAgingReport':
-                    result = this.dataContext.aging;
-                    break;
-                case 'getAnomalies':
-                    result = this.dataContext.anomalies;
-                    break;
-                case 'getCustomerDetails':
-                    const name = (fc.args as any).name?.toLowerCase();
-                    const customerInvoices = this.dataContext.invoices.filter(i => i.customerName.toLowerCase().includes(name));
-                    const totalDebt = customerInvoices.reduce((sum, i) => sum + i.outstanding, 0);
-                    result = {
-                        found: customerInvoices.length > 0,
-                        invoiceCount: customerInvoices.length,
-                        totalOutstanding: totalDebt,
-                        invoices: customerInvoices.slice(0, 5) // Limit to 5 for context window
-                    };
-                    break;
-                default:
-                    result = { error: "Fungsi tidak dikenal" };
-            }
-        } catch (err: any) {
-            result = { error: err.message };
-        }
-
-        functionResponses.push({
-            id: fc.id,
-            name: fc.name,
-            response: { result }
-        });
+    if (!this.sessionPromise) return;
+    if (!this.dataContext) {
+      console.warn('handleToolCall called but dataContext is empty');
+      return;
     }
 
-    const session = await this.sessionPromise;
-    session.sendToolResponse({ functionResponses });
+    const functionResponses: any[] = [];
+
+    for (const fc of toolCall.functionCalls || []) {
+      let result: any = {};
+      let argsObj: any = {};
+      try {
+        // fc.args may be a JSON string or already an object depending on SDK
+        if (typeof fc.args === 'string') {
+          try {
+            argsObj = JSON.parse(fc.args);
+          } catch (e) {
+            // fallback: leave as raw string
+            argsObj = { raw: fc.args };
+          }
+        } else {
+          argsObj = fc.args || {};
+        }
+
+        switch (fc.name) {
+          case 'getAuditSummary':
+            result = this.dataContext.summary;
+            break;
+          case 'getAgingReport':
+            result = this.dataContext.aging;
+            break;
+          case 'getAnomalies':
+            result = this.dataContext.anomalies;
+            break;
+          case 'getCustomerDetails':
+            const name = (argsObj as any).name?.toLowerCase();
+            const customerInvoices = this.dataContext.invoices.filter(i => i.customerName.toLowerCase().includes(name));
+            const totalDebt = customerInvoices.reduce((sum, i) => sum + i.outstanding, 0);
+            result = {
+              found: customerInvoices.length > 0,
+              invoiceCount: customerInvoices.length,
+              totalOutstanding: totalDebt,
+              invoices: customerInvoices.slice(0, 5) // Limit to 5 for context window
+            };
+            break;
+          default:
+            result = { error: "Fungsi tidak dikenal" };
+        }
+      } catch (err: any) {
+        result = { error: err?.message ?? String(err) };
+      }
+
+      functionResponses.push({
+        id: fc.id,
+        name: fc.name,
+        response: { result }
+      });
+    }
+
+    try {
+      const session = await this.sessionPromise;
+      if (!session) {
+      console.warn('No active session to send tool response');
+      return;
+      }
+      // Debug log to help track tool responses and avoid hallucination
+      console.debug('Sending tool responses', functionResponses.map(f => ({ name: f.name, id: f.id })));
+      session.sendToolResponse({ functionResponses });
+    } catch (e) {
+      console.error('Error sending tool response', e);
+    }
   }
 
   private async startMicrophone() {

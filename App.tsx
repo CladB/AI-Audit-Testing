@@ -14,19 +14,19 @@ function App() {
       {/* Navbar */}
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm z-10">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-600 rounded-lg">
+          <div className="p-2 bg-pink-400 rounded-lg">
              <ShieldCheck className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-slate-800 tracking-tight">Audit<span className="text-blue-600">AI</span></h1>
+          <h1 className="text-xl font-bold text-slate-800 tracking-tight">Audit <span className="text-pink-400">AIVoice</span> by <span className="text-pink-400">Asierra</span></h1>
         </div>
         
         {data && (
            <button 
              onClick={() => setIsLiveSessionOpen(true)}
-             className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+             className="flex items-center gap-2 px-4 py-2 bg-pink-400 hover:bg-pink-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
            >
              <Mic className="w-4 h-4" />
-             <span>Mulai Audit Suara</span>
+             <span className="text-white">Mulai Audit Suara</span>
            </button>
         )}
       </header>

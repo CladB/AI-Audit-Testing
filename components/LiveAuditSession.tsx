@@ -11,43 +11,59 @@ interface LiveAuditSessionProps {
 const LiveAuditSession: React.FC<LiveAuditSessionProps> = ({ data, onClose }) => {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [activeSpeaker, setActiveSpeaker] = useState<'ai' | 'user' | 'none'>('none'); // Simulated for visual
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const serviceRef = useRef<GeminiLiveService | null>(null);
 
   useEffect(() => {
-    // Check API Key
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("No VITE_GEMINI_API_KEY found in environment");
-      setStatus('error');
-      return;
-    }
+    let mounted = true;
 
-    const service = new GeminiLiveService(apiKey);
-    serviceRef.current = service;
-
-    // Set the context for tools
-    service.setDataContext({
-        invoices: data.invoices,
-        aging: data.aging,
-        anomalies: data.anomalies,
-        summary: data.summary
-    });
-
-    // Connect
-    service.connect(
-      (text, isUser) => {
-        // Handle transcription text if needed for UI logs
-        // For now we just use it to animate speaker
-        setActiveSpeaker('ai');
-        setTimeout(() => setActiveSpeaker('none'), 2000); 
-      },
-      (newStatus) => {
-        setStatus(newStatus as any);
+    const start = async () => {
+      setErrorMessage(null);
+      // Check API Key
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        console.error("No VITE_GEMINI_API_KEY found in environment");
+        setErrorMessage('Tidak ada VITE_GEMINI_API_KEY. Periksa konfigurasi environment.');
+        setStatus('error');
+        return;
       }
-    );
+
+      const service = new GeminiLiveService(apiKey);
+      serviceRef.current = service;
+
+      // Set the context for tools
+      service.setDataContext({
+          invoices: data.invoices,
+          aging: data.aging,
+          anomalies: data.anomalies,
+          summary: data.summary
+      });
+
+      try {
+        await service.connect(
+          (text, isUser) => {
+            // Handle transcription text if needed for UI logs
+            setActiveSpeaker('ai');
+            setTimeout(() => setActiveSpeaker('none'), 2000);
+          },
+          (newStatus) => {
+            if (!mounted) return;
+            setStatus(newStatus as any);
+          }
+        );
+      } catch (err: any) {
+        console.error('Failed to connect to Gemini Live:', err);
+        if (!mounted) return;
+        setErrorMessage(err?.message ? String(err.message) : 'Koneksi gagal. Periksa API key dan jaringan.');
+        setStatus('error');
+      }
+    };
+
+    start();
 
     return () => {
-      service.disconnect();
+      mounted = false;
+      serviceRef.current?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -105,8 +121,31 @@ const LiveAuditSession: React.FC<LiveAuditSessionProps> = ({ data, onClose }) =>
            )}
 
            {status === 'error' && (
-                <div className="text-red-600 text-sm">
-                   Pastikan `VITE_GEMINI_API_KEY` diatur dengan benar di environment.
+                <div className="text-red-600 text-sm space-y-2">
+                   <div>Pastikan <code>VITE_GEMINI_API_KEY</code> diatur dengan benar di environment.</div>
+                   {errorMessage && <div className="text-xs text-red-500">{errorMessage}</div>}
+                   <div className="mt-2 flex gap-2 justify-center">
+                     <button
+                       className="px-3 py-1 bg-blue-600 text-white rounded"
+                       onClick={async () => {
+                         setStatus('connecting');
+                         setErrorMessage(null);
+                         try {
+                           if (serviceRef.current) {
+                             await serviceRef.current.connect(
+                               (t, isUser) => { setActiveSpeaker('ai'); setTimeout(() => setActiveSpeaker('none'), 2000); },
+                               (s) => setStatus(s as any)
+                             );
+                           }
+                         } catch (e: any) {
+                           console.error('Retry failed', e);
+                           setErrorMessage(e?.message ? String(e.message) : 'Retry gagal.');
+                           setStatus('error');
+                         }
+                       }}
+                     >Retry</button>
+                     <button className="px-3 py-1 bg-gray-200 rounded" onClick={onClose}>Close</button>
+                   </div>
                 </div>
            )}
         </div>
