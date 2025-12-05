@@ -1,0 +1,7 @@
+{
+  "name": "Copy of AuditAI - Mitra AR Cerdas",
+  "description": "Mitra Audit AI profesional untuk analisis Piutang Usaha, menampilkan interaksi Suara Langsung, deteksi anomali, dan analisis umur piutang.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Pastikan VITE_GEMINI_API_KEY di-set di Netlify dashboard environment variables
+  # Jangan hardcode API key di file ini!
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
