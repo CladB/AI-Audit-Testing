@@ -18,16 +18,88 @@ export const parseCSV = async (file: File): Promise<ParsedData> => {
 };
 
 const processCSVData = (csvText: string): ParsedData => {
-  const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
-  if (lines.length < 2) throw new Error('File CSV kosong atau header hilang');
+  // Robust CSV parsing: handle quoted fields and embedded newlines
+  const detectDelimiter = (text: string) => {
+    // Look at first non-empty line and count commas/semicolons outside quotes
+    let inQuotes = false;
+    let commaCount = 0;
+    let semiCount = 0;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') {
+        // toggle quote unless it's escaped by another quote
+        if (text[i + 1] === '"') {
+          i++; // skip escaped quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (!inQuotes) {
+        if (ch === ',') commaCount++;
+        if (ch === ';') semiCount++;
+        if (ch === '\n') break;
+      }
+    }
+    return semiCount > commaCount ? ';' : ',';
+  };
 
-  // Deteksi Delimiter (Pemisah): Cek apakah baris pertama menggunakan titik koma (;) atau koma (,)
-  const firstLine = lines[0];
-  const delimiter = firstLine.includes(';') ? ';' : ',';
+  const parseRows = (text: string, delimiter: string) => {
+    const rows: string[][] = [];
+    let cur: string = '';
+    let row: string[] = [];
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const next = text[i + 1];
+      if (ch === '"') {
+        if (inQuotes && next === '"') {
+          // escaped quote
+          cur += '"';
+          i++; // skip next
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (!inQuotes) {
+        if (ch === delimiter) {
+          row.push(cur);
+          cur = '';
+          continue;
+        }
+        if (ch === '\r') {
+          // ignore, handle on \n
+          continue;
+        }
+        if (ch === '\n') {
+          row.push(cur);
+          rows.push(row);
+          row = [];
+          cur = '';
+          continue;
+        }
+      }
+      cur += ch;
+    }
+    // push last field
+    if (cur !== '' || row.length > 0) {
+      row.push(cur);
+      rows.push(row);
+    }
+    return rows;
+  };
 
-  // Hapus tanda kutip jika ada (misal: "Nama Pelanggan","Jumlah")
+  // Trim BOM if present
+  if (csvText.charCodeAt(0) === 0xFEFF) csvText = csvText.slice(1);
+
+  const delimiter = detectDelimiter(csvText);
+  const rows = parseRows(csvText, delimiter).filter(r => r.join('').trim() !== '');
+  if (rows.length < 2) throw new Error('File CSV kosong atau header hilang');
+
+  // Normalize header
   const cleanHeader = (h: string) => h.trim().replace(/^"|"$/g, '').toLowerCase();
-  const headers = firstLine.split(delimiter).map(cleanHeader);
+  const headers = rows[0].map(cleanHeader);
   
   // Mapping logic (English and Indonesian support)
   const getIndex = (keys: string[]) => headers.findIndex(h => keys.some(k => h.includes(k)));
@@ -54,11 +126,11 @@ const processCSVData = (csvText: string): ParsedData => {
 
   const today = new Date(); // Simulating "Audit Date" as today
 
-  // Process Rows
-  for (let i = 1; i < lines.length; i++) {
-    // Gunakan delimiter yang sama dengan header, dan bersihkan tanda kutip pada values
-    const rawCols = lines[i].split(delimiter);
-    const cols = rawCols.map(c => c.trim().replace(/^"|"$/g, ''));
+  // Process Rows (rows is an array of parsed fields)
+  for (let i = 1; i < rows.length; i++) {
+    // Each rows[i] is already an array of fields (may include surrounding quotes)
+    const rawCols = rows[i];
+    const cols = rawCols.map(c => (c ?? '').toString().trim().replace(/^"|"$/g, ''));
     
     if (cols.length < headers.length && cols.length < 2) continue; // Skip baris kosong/rusak
 
